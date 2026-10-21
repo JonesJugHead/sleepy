@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sleepy Config Generator</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #f8f9fb;
+    --border: #dfe2e8;
+    --text: #1b1e24;
+    --muted: #646b78;
+    --accent: #5b5bd6;
+    --accent-2: #4747c2;
+    --accent-soft: #ececfd;
+    --ok: #1f8a4c;
+    --warn: #b26a00;
+    --warn-soft: #fff4e0;
+    --err: #c62f3a;
+    --err-soft: #fdecee;
+    --code-bg: #1d1f27;
+    --code-text: #e6e8ef;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16, 20, 30, .06), 0 4px 16px rgba(16, 20, 30, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111318;
+      --panel: #181b22;
+      --panel-2: #1e222b;
+      --border: #2b303b;
+      --text: #e7e9ee;
+      --muted: #9aa1ae;
+      --accent: #8b8bf5;
+      --accent-2: #a3a3f8;
+      --accent-soft: #25264a;
+      --ok: #4cc27f;
+      --warn: #f0a93b;
+      --warn-soft: #3a2c12;
+      --err: #f06b75;
+      --err-soft: #3d1a1f;
+      --code-bg: #0c0e12;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 20px 24px 8px;
+    max-width: 1320px;
+    margin: 0 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  header .tag {
+    font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  }
+  header p { margin: 0; color: var(--muted); flex-basis: 100%; }
+  main {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 12px 24px 40px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; padding: 12px 16px 32px; } header { padding: 16px 16px 4px; } }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .sticky { position: sticky; top: 16px; }
+  @media (max-width: 980px) { .sticky { position: static; } }
+  section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px 18px;
+  }
+  section.card h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+  }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  .full { grid-column: 1 / -1; }
+  label.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .label { font-weight: 600; font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .hint code, .note code { font-size: 11.5px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%;
+    font: inherit;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  textarea { resize: vertical; min-height: 58px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input:disabled, textarea:disabled { opacity: .55; }
+  .with-suffix { display: flex; align-items: center; gap: 8px; }
+  .with-suffix input { flex: 1; }
+  .suffix { color: var(--muted); font-size: 12px; white-space: nowrap; min-width: 64px; }
+  .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { width: 36px; height: 20px; appearance: none; background: var(--border); border-radius: 999px; position: relative; cursor: pointer; transition: background .15s; flex: none; margin: 0; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked { background: var(--accent); }
+  .switch input:checked::after { transform: translateX(16px); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel-2); }
+  .seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--muted); padding: 6px 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .palette button {
+    width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+    cursor: pointer; font: 700 11px/1 ui-monospace, monospace; padding: 0;
+  }
+  .palette .fmt { background: var(--panel-2); color: var(--text); width: auto; padding: 0 7px; }
+  .btn {
+    font: inherit; font-weight: 600; font-size: 13px;
+    border-radius: 8px; padding: 7px 14px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-2); }
+  .btn.ghost { background: transparent; }
+  pre.toml {
+    margin: 0;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow: auto;
+    max-height: 56vh;
+    font: 12.5px/1.55 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    white-space: pre;
+  }
+  .t-com { color: #7c8496; }
+  .t-sec { color: #c792ea; font-weight: 600; }
+  .t-key { color: #82aaff; }
+  .t-str { color: #c3e88d; }
+  .t-num { color: #f78c6c; }
+  .t-bool { color: #ffcb6b; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  .toolbar .spacer { flex: 1; }
+  .msgs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .msg { border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .msg.err { background: var(--err-soft); color: var(--err); }
+  .msg.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg.ok { color: var(--ok); padding: 0 2px; }
+  /* Minecraft server list preview */
+  .mc {
+    background: #1b1b1b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='8' height='8' fill='%23232323'/%3E%3Crect width='4' height='4' fill='%232a2a2a'/%3E%3Crect x='4' y='4' width='4' height='4' fill='%232a2a2a'/%3E%3C/svg%3E");
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .mc-entry {
+    display: flex; gap: 10px; align-items: flex-start;
+    border: 2px solid #808080; background: rgba(0, 0, 0, .55);
+    padding: 6px; max-width: 620px;
+  }
+  .mc-icon {
+    width: 64px; height: 64px; flex: none; image-rendering: pixelated;
+    background: linear-gradient(135deg, #5b8731 0 50%, #79553a 50%);
+    display: grid; place-items: center; font-size: 30px;
+  }
+  .mc-body { flex: 1; min-width: 0; font: 15px/1.25 ui-monospace, "Cascadia Mono", Consolas, monospace; text-shadow: 2px 2px 0 rgba(0, 0, 0, .55); }
+  .mc-top { display: flex; justify-content: space-between; gap: 10px; color: #fff; }
+  .mc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mc-players { color: #aaa; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  .bars { display: inline-flex; gap: 1px; align-items: flex-end; height: 12px; }
+  .bars i { width: 2px; background: #3fdc3f; display: block; }
+  .mc-motd { color: #aaa; white-space: pre; overflow: hidden; }
+  .mc-motd span.b { font-weight: 700; }
+  .mc-motd span.i { font-style: italic; }
+  .mc-kick {
+    margin-top: 12px; text-align: center; color: #fff; padding: 18px 10px;
+    font: 15px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; text-shadow: 2px 2px 0 rgba(0, 0, 0, .55);
+  }
+  .mc-kick .title { color: #aaa; margin-bottom: 8px; }
+  .preview-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  dialog {
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text);
+    width: min(640px, calc(100vw - 32px)); padding: 18px;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  dialog h3 { margin: 0 0 8px; }
+  dialog textarea { min-height: 240px; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 600;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sleepy · config generator</h1>
+  <span class="tag">sleepy.toml · v0.0.4</span>
+  <p>Fill in the form, then download the file and drop it in the server root, next to the binary.</p>
+</header>
+
+<main>
+  <div class="col">
+    <section class="card">
+      <h2>Network</h2>
+      <div class="grid">
+        <label class="field full">
+          <span class="switch"><input type="checkbox" id="addrAuto" checked><span class="label">Automatic public address</span></span>
+          <span class="hint">Sleepy listens on <code>0.0.0.0</code> and the port allocated by Pterodactyl (<code>SERVER_PORT</code> variable). Leave checked on Pterodactyl.</span>
+        </label>
+        <label class="field">
+          <span class="label">Listen IP</span>
+          <input type="text" id="addrHost" value="0.0.0.0" disabled>
+        </label>
+        <label class="field">
+          <span class="label">Public port</span>
+          <input type="number" id="addrPort" value="25565" min="1" max="65535" disabled>
+        </label>
+        <label class="field">
+          <span class="label">Local Minecraft server port</span>
+          <input type="number" id="backendPort" value="25566" min="1" max="65535">
+          <span class="hint">Written to <code>server.properties</code>, bound to 127.0.0.1 only. Must differ from the public port.</span>
+        </label>
+        <label class="field">
+          <span class="label">Forward real player IP</span>
+          <select id="proxyProtocol">
+            <option value="auto">auto (Paper and forks)</option>
+            <option value="on">on (always)</option>
+            <option value="off">off (never)</option>
+          </select>
+          <span class="hint">PROXY protocol: Paper sees the players' IP instead of 127.0.0.1.</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Minecraft server</h2>
+      <div class="row" style="margin-bottom:12px">
+        <div class="seg" id="cmdMode">
+          <button type="button" data-v="builder" class="on">Builder</button>
+          <button type="button" data-v="custom">Custom command</button>
+        </div>
+      </div>
+      <div class="grid" id="builder">
+        <label class="field">
+          <span class="label">Jar file</span>
+          <input type="text" id="jar" value="server.jar">
+        </label>
+        <label class="field">
+          <span class="label">Memory</span>
+          <select id="memMode">
+            <option value="pct">Percentage of the Pterodactyl limit (recommended)</option>
+            <option value="xmx">Fixed size (-Xmx)</option>
+          </select>
+        </label>
+        <label class="field" id="pctField">
+          <span class="label">RAM percentage</span>
+          <div class="with-suffix"><input type="number" id="memPct" value="85" min="10" max="95" step="1"><span class="suffix">%</span></div>
+          <span class="hint">85% leaves headroom for the JVM and Sleepy.</span>
+        </label>
+        <label class="field" id="xmxField" hidden>
+          <span class="label">Maximum heap</span>
+          <div class="with-suffix"><input type="number" id="xmx" value="2048" min="256" step="256"><span class="suffix">MB</span></div>
+          <span class="hint">Stay well below the Pterodactyl server limit, or Java gets killed.</span>
+        </label>
+        <label class="field">
+          <span class="label">Initial heap (-Xms)</span>
+          <div class="with-suffix"><input type="number" id="xms" value="128" min="64" step="64"><span class="suffix">MB</span></div>
+        </label>
+        <label class="field full">
+          <span class="switch"><input type="checkbox" id="aikar"><span class="label">Aikar's flags (G1GC tuned for Paper)</span></span>
+        </label>
+      </div>
+      <label class="field full" id="customField" hidden>
+        <span class="label">Command</span>
+        <textarea id="customCmd" rows="3">java -Xms128M -XX:MaxRAMPercentage=85.0 -jar server.jar nogui</textarea>
+        <span class="hint">Run through <code>sh</code> in the server directory: <code>${SERVER_MEMORY}</code> and <code>VAR=value</code> work.</span>
+      </label>
+      <label class="field full" style="margin-top:12px">
+        <span class="label">Generated command</span>
+        <textarea id="cmdPreview" rows="2" readonly></textarea>
+      </label>
+      <label class="field" style="margin-top:12px">
+        <span class="label">Server directory</span>
+        <input type="text" id="directory" value=".">
+        <span class="hint">Relative to Sleepy's directory. <code>.</code> on Pterodactyl.</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Sleep</h2>
+      <div class="grid">
+        <label class="field">
+          <span class="label">Sleep after</span>
+          <div class="with-suffix"><input type="number" id="sleepAfter" value="300" min="0" step="1"><span class="suffix" data-for="sleepAfter"></span></div>
+          <span class="hint">Seconds with no player before stopping.</span>
+        </label>
+        <label class="field">
+          <span class="label">Minimum online time</span>
+          <div class="with-suffix"><input type="number" id="minOnline" value="60" min="0" step="1"><span class="suffix" data-for="minOnline"></span></div>
+          <span class="hint">Never stops before this duration.</span>
+        </label>
+        <label class="field">
+          <span class="label">Player hold on wake-up</span>
+          <div class="with-suffix"><input type="number" id="holdTimeout" value="25" min="0" step="1"><span class="suffix" data-for="holdTimeout"></span></div>
+          <span class="hint">The client gives up around 30 s.</span>
+        </label>
+        <label class="field">
+          <span class="label">Stop timeout</span>
+          <div class="with-suffix"><input type="number" id="stopTimeout" value="60" min="0" step="1"><span class="suffix" data-for="stopTimeout"></span></div>
+          <span class="hint">After <code>stop</code>, before SIGTERM.</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Server list and messages</h2>
+      <div class="grid">
+        <label class="field full">
+          <span class="label">MOTD shown while asleep and starting</span>
+          <select id="motdSource">
+            <option value="sleepy">Sleepy's (messages below)</option>
+            <option value="server">The Minecraft server's (the real MOTD)</option>
+          </select>
+          <span class="hint" id="motdSourceHint">Sleepy remembers the real MOTD every time the server runs (plugins and colors included). Before the first start, it uses <code>motd=</code> from <code>server.properties</code>.</span>
+        </label>
+        <label class="field full" data-sleepy-motd>
+          <span class="label">MOTD while asleep</span>
+          <textarea id="motdSleeping" rows="2" data-motd>§7Server is asleep §8- §ajoin to wake it up</textarea>
+          <div class="palette" data-target="motdSleeping"></div>
+        </label>
+        <label class="field full" data-sleepy-motd>
+          <span class="label">MOTD while starting</span>
+          <textarea id="motdStarting" rows="2" data-motd>§eServer is starting...</textarea>
+          <div class="palette" data-target="motdStarting"></div>
+        </label>
+        <label class="field">
+          <span class="label">Displayed version name</span>
+          <input type="text" id="versionName" value="Sleepy">
+        </label>
+        <label class="field">
+          <span class="label">Access</span>
+          <span class="switch" style="margin-top:6px"><input type="checkbox" id="whitelistOnly"><span>Only whitelisted players can wake the server</span></span>
+        </label>
+        <label class="field full">
+          <span class="label">Hold / refusal message</span>
+          <input type="text" id="kickMessage" value="The server is starting, reconnect in a few seconds">
+          <span class="hint">Sent if the server is not ready in time, or to a player not on the whitelist.</span>
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <div class="col sticky">
+    <section class="card">
+      <div class="preview-head">
+        <h2 style="margin:0">In-game preview</h2>
+        <div class="seg" id="previewMode">
+          <button type="button" data-v="sleeping" class="on">Asleep</button>
+          <button type="button" data-v="starting">Starting</button>
+          <button type="button" data-v="kick">Message</button>
+        </div>
+      </div>
+      <div class="mc">
+        <div class="mc-entry" id="mcEntry">
+          <div class="mc-icon">💤</div>
+          <div class="mc-body">
+            <div class="mc-top">
+              <span class="mc-name">My server</span>
+              <span class="mc-players"><span>0/20</span><span class="bars"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span></span>
+            </div>
+            <div class="mc-motd" id="mcMotd"></div>
+          </div>
+        </div>
+        <div class="mc-kick" id="mcKick" hidden>
+          <div class="title">Connection lost</div>
+          <div id="mcKickText"></div>
+        </div>
+      </div>
+      <div class="note">The client always shows the server as compatible: Sleepy echoes the client's protocol.</div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">sleepy.toml</h2>
+        <span class="spacer"></span>
+        <button class="btn ghost" id="btnImport" type="button">Import</button>
+        <button class="btn ghost" id="btnReset" type="button">Reset</button>
+        <button class="btn" id="btnCopy" type="button">Copy</button>
+        <button class="btn primary" id="btnDownload" type="button">Download</button>
+      </div>
+      <div class="msgs" id="msgs"></div>
+      <pre class="toml" id="output"></pre>
+    </section>
+  </div>
+</main>
+
+<dialog id="importDialog">
+  <h3>Import a sleepy.toml</h3>
+  <p class="hint" style="margin:0 0 10px">Paste your file content or pick it from disk.</p>
+  <textarea id="importText" placeholder="public_address = &quot;&quot;&#10;..."></textarea>
+  <div class="msgs" id="importMsgs" style="margin-top:10px"></div>
+  <div class="toolbar" style="margin:10px 0 0">
+    <input type="file" id="importFile" accept=".toml,text/plain">
+    <span class="spacer"></span>
+    <button class="btn ghost" id="importCancel" type="button">Cancel</button>
+    <button class="btn primary" id="importOk" type="button">Import</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  // Mirrors defaults() in internal/config/config.go (v0.0.4).
+  const DEFAULTS = {
+    addrAuto: true, addrHost: "0.0.0.0", addrPort: 25565,
+    backendPort: 25566, proxyProtocol: "auto",
+    cmdMode: "builder", jar: "server.jar", memMode: "pct", memPct: 85, xmx: 2048, xms: 128, aikar: false,
+    customCmd: "java -Xms128M -XX:MaxRAMPercentage=85.0 -jar server.jar nogui",
+    directory: ".",
+    sleepAfter: 300, minOnline: 60, holdTimeout: 25, stopTimeout: 60,
+    motdSleeping: "§7Server is asleep §8- §ajoin to wake it up",
+    motdStarting: "§eServer is starting...",
+    motdSource: "sleepy", versionName: "Sleepy", whitelistOnly: false,
+    kickMessage: "The server is starting, reconnect in a few seconds",
+  };
+
+  // Aikar's flags, minus the options removed from recent JDKs.
+  const AIKAR = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions " +
+    "-XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 " +
+    "-XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 " +
+    "-XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:SurvivorRatio=32 " +
+    "-XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true";
+
+  const FIELDS = Object.keys(DEFAULTS).filter((k) => k !== "cmdMode");
+  let cmdMode = "builder";
+  let previewMode = "sleeping";
+
+  // ---------- form state ----------
+  function read() {
+    const s = { cmdMode };
+    for (const k of FIELDS) {
+      const el = $(k);
+      if (el.type === "checkbox") s[k] = el.checked;
+      else if (el.type === "number") s[k] = el.value === "" ? NaN : Number(el.value);
+      else s[k] = el.value;
+    }
+    return s;
+  }
+
+  function write(s) {
+    for (const k of FIELDS) {
+      if (!(k in s)) continue;
+      const el = $(k);
+      if (el.type === "checkbox") el.checked = !!s[k];
+      else el.value = s[k];
+    }
+    setSeg("cmdMode", s.cmdMode || "builder");
+  }
+
+  function setSeg(id, value) {
+    for (const b of $(id).querySelectorAll("button")) b.classList.toggle("on", b.dataset.v === value);
+    if (id === "cmdMode") cmdMode = value;
+    if (id === "previewMode") previewMode = value;
+  }
+
+  function command(s) {
+    if (s.cmdMode === "custom") return s.customCmd.trim();
+    const mem = s.memMode === "pct" ? `-XX:MaxRAMPercentage=${Number(s.memPct).toFixed(1)}` : `-Xmx${s.xmx}M`;
+    return ["java", `-Xms${s.xms}M`, mem, s.aikar ? AIKAR : "", "-jar", s.jar.trim() || "server.jar", "nogui"]
+      .filter(Boolean).join(" ");
+  }
+
+  // ---------- TOML ----------
+  function tomlString(v) {
+    let out = "";
+    for (const ch of String(v)) {
+      const c = ch.codePointAt(0);
+      if (ch === "\\") out += "\\\\";
+      else if (ch === '"') out += '\\"';
+      else if (ch === "\n") out += "\\n";
+      else if (ch === "\t") out += "\\t";
+      else if (ch === "\r") continue;
+      else if (c < 0x20 || c === 0x7f) out += "\\u" + c.toString(16).padStart(4, "0");
+      else out += ch;
+    }
+    return `"${out}"`;
+  }
+  const num = (n) => String(Number(n));
+
+  function toml(s) {
+    const address = s.addrAuto ? "" : `${s.addrHost.trim()}:${s.addrPort}`;
+    return `# Sleepy configuration (generated by the config generator).
+# All paths are relative to the current directory (the Pterodactyl server root).
+
+# Public address Sleepy listens on (the port allocated by Pterodactyl).
+# Leave empty to use 0.0.0.0 and the SERVER_PORT variable set by Pterodactyl (25565 if unset).
+public_address = ${tomlString(address)}
+
+# Sent to a waiting player when the server did not become ready within hold_timeout,
+# and to players who are not allowed to wake the server (whitelist_only).
+kick_message = ${tomlString(s.kickMessage)}
+
+# Seconds a connecting player is held while the server starts (the client gives up around 30).
+hold_timeout = ${num(s.holdTimeout)}
+
+# Seconds with no players before the server is stopped.
+sleep_after = ${num(s.sleepAfter)}
+
+# Never stop a server that has been running for less than this many seconds.
+minimum_online_time = ${num(s.minOnline)}
+
+# Seconds to wait after sending "stop" before sending SIGTERM (then SIGKILL as a last resort).
+stop_timeout = ${num(s.stopTimeout)}
+
+# Only players listed in whitelist.json can wake the server up.
+whitelist_only = ${s.whitelistOnly}
+
+[backend]
+# Command that starts the Minecraft server, run through sh in the backend directory.
+command = ${tomlString(command(s))}
+# Local port the Minecraft server listens on (written to server.properties, bound to 127.0.0.1).
+port = ${num(s.backendPort)}
+# Directory containing server.properties, server.jar, whitelist.json and server-icon.png.
+directory = ${tomlString(s.directory)}
+# Forward the players' real IP with the PROXY protocol: "auto" (Paper and forks), "on" or "off".
+proxy_protocol = ${tomlString(s.proxyProtocol)}
+
+[motd]
+# Which MOTD the server list shows while the server is asleep or starting:
+#   "sleepy": the two messages below.
+#   "server": the real server's MOTD, remembered each time it runs (motd= in server.properties until then).
+source = ${tomlString(s.motdSource)}
+# Shown in the server list while the server is asleep / starting. Supports § color codes.
+sleeping = ${tomlString(s.motdSleeping)}
+starting = ${tomlString(s.motdStarting)}
+# Version name shown in the server list while Sleepy answers on behalf of the server.
+version_name = ${tomlString(s.versionName)}
+`;
+  }
+
+  function highlight(text) {
+    const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return text.split("\n").map((line) => {
+      if (/^\s*#/.test(line)) return `<span class="t-com">${esc(line)}</span>`;
+      if (/^\s*\[.*\]\s*$/.test(line)) return `<span class="t-sec">${esc(line)}</span>`;
+      const m = line.match(/^(\s*[\w-]+)(\s*=\s*)(.*)$/);
+      if (!m) return esc(line);
+      const v = m[3];
+      const cls = v.startsWith('"') ? "t-str" : /^(true|false)$/.test(v) ? "t-bool" : "t-num";
+      return `<span class="t-key">${esc(m[1])}</span>${esc(m[2])}<span class="${cls}">${esc(v)}</span>`;
+    }).join("\n");
+  }
+
+  // Minimal TOML reader for sleepy.toml: tables, basic/literal strings, numbers, booleans.
+  function parseToml(text) {
+    const out = {};
+    let prefix = "";
+    text.split(/\r?\n/).forEach((raw, i) => {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) return;
+      const table = line.match(/^\[\s*([\w.-]+)\s*\]\s*(#.*)?$/);
+      if (table) { prefix = table[1] + "."; return; }
+      const kv = line.match(/^([\w-]+)\s*=\s*(.*)$/);
+      if (!kv) throw new Error(`line ${i + 1} unreadable: ${line}`);
+      out[prefix + kv[1]] = parseValue(kv[2], i + 1);
+    });
+    return out;
+  }
+
+  function parseValue(v, lineNo) {
+    if (v.startsWith('"')) {
+      let s = "";
+      for (let i = 1; i < v.length; i++) {
+        const ch = v[i];
+        if (ch === '"') return s;
+        if (ch !== "\\") { s += ch; continue; }
+        const e = v[++i];
+        const simple = { n: "\n", t: "\t", r: "\r", '"': '"', "\\": "\\", b: "\b", f: "\f" };
+        if (e in simple) s += simple[e];
+        else if (e === "u" || e === "U") {
+          const len = e === "u" ? 4 : 8;
+          s += String.fromCodePoint(parseInt(v.substr(i + 1, len), 16));
+          i += len;
+        } else throw new Error(`line ${lineNo}: unknown escape \\${e}`);
+      }
+      throw new Error(`line ${lineNo}: missing closing quote`);
+    }
+    if (v.startsWith("'")) {
+      const end = v.indexOf("'", 1);
+      if (end < 0) throw new Error(`line ${lineNo}: missing closing apostrophe`);
+      return v.slice(1, end);
+    }
+    const bare = v.replace(/\s*#.*$/, "").trim();
+    if (bare === "true" || bare === "false") return bare === "true";
+    if (/^[+-]?\d+(\.\d+)?$/.test(bare.replace(/_/g, ""))) return Number(bare.replace(/_/g, ""));
+    throw new Error(`line ${lineNo}: unrecognized value "${bare}"`);
+  }
+
+  function fromToml(t) {
+    const s = { ...DEFAULTS };
+    const known = ["public_address", "kick_message", "hold_timeout", "sleep_after", "minimum_online_time", "stop_timeout",
+      "whitelist_only", "backend.command", "backend.port", "backend.directory", "backend.proxy_protocol",
+      "motd.source", "motd.sleeping", "motd.starting", "motd.version_name"];
+    const unknown = Object.keys(t).filter((k) => !known.includes(k));
+    if ("public_address" in t) {
+      const m = String(t.public_address).trim().match(/^(.+):(\d+)$/);
+      s.addrAuto = !m;
+      if (m) { s.addrHost = m[1].replace(/^\[(.*)\]$/, "$1"); s.addrPort = Number(m[2]); }
+    }
+    const map = { kick_message: "kickMessage", hold_timeout: "holdTimeout", sleep_after: "sleepAfter",
+      minimum_online_time: "minOnline", stop_timeout: "stopTimeout", whitelist_only: "whitelistOnly",
+      "backend.port": "backendPort", "backend.directory": "directory", "backend.proxy_protocol": "proxyProtocol",
+      "motd.source": "motdSource", "motd.sleeping": "motdSleeping", "motd.starting": "motdStarting", "motd.version_name": "versionName" };
+    for (const [key, field] of Object.entries(map)) if (key in t) s[field] = t[key];
+    if ("backend.command" in t) Object.assign(s, commandToForm(String(t["backend.command"])));
+    return { state: s, unknown };
+  }
+
+  // Recognises commands the assistant can build; anything else stays a free command.
+  function commandToForm(cmd) {
+    const m = cmd.trim().match(/^java -Xms(\d+)M (?:-XX:MaxRAMPercentage=([\d.]+)|-Xmx(\d+)M)( .+?)? -jar (\S+) nogui$/);
+    if (m && (!m[4] || m[4].trim() === AIKAR)) {
+      return { cmdMode: "builder", xms: Number(m[1]), memMode: m[2] ? "pct" : "xmx",
+        memPct: m[2] ? Number(m[2]) : DEFAULTS.memPct, xmx: m[3] ? Number(m[3]) : DEFAULTS.xmx,
+        aikar: !!m[4], jar: m[5], customCmd: cmd };
+    }
+    return { cmdMode: "custom", customCmd: cmd };
+  }
+
+  // ---------- validation ----------
+  function validate(s) {
+    const errs = [], warns = [];
+    const isPort = (p) => Number.isInteger(p) && p >= 1 && p <= 65535;
+    if (!s.addrAuto) {
+      if (!s.addrHost.trim()) errs.push("Listen IP is empty.");
+      if (!isPort(s.addrPort)) errs.push("Invalid public port (1 to 65535).");
+      else if (s.addrPort === s.backendPort) errs.push("The local port must differ from the public port.");
+    }
+    if (!isPort(s.backendPort)) errs.push("Invalid local port (1 to 65535).");
+    for (const [k, label] of [["sleepAfter", "Sleep after"], ["minOnline", "Minimum online time"], ["holdTimeout", "Player hold"], ["stopTimeout", "Stop timeout"]]) {
+      if (!Number.isFinite(s[k]) || s[k] < 0) errs.push(`${label}: a positive number of seconds is expected.`);
+    }
+    if (!command(s)) errs.push("The start command is empty.");
+    if (s.cmdMode === "builder" && !/\.jar$/i.test(s.jar.trim())) warns.push("The jar file does not end with .jar.");
+    if (s.holdTimeout > 28) warns.push("Player hold > 28 s: the client may give up first (around 30 s).");
+    if (s.sleepAfter > 0 && s.sleepAfter < 30) warns.push("Sleep after < 30 s: the server may stop between two reconnections.");
+    if (s.stopTimeout < 10) warns.push("Stop timeout < 10 s: the world may not have time to save.");
+    if (s.cmdMode === "builder" && s.memMode === "pct" && s.memPct > 90) warns.push("More than 90% of RAM: Java may exceed the container limit.");
+    if (s.cmdMode === "builder" && s.memMode === "xmx" && s.xms > s.xmx) errs.push("The initial heap exceeds the maximum heap.");
+    return { errs, warns };
+  }
+
+  // ---------- Minecraft text rendering ----------
+  const COLORS = { 0: "#000000", 1: "#0000AA", 2: "#00AA00", 3: "#00AAAA", 4: "#AA0000", 5: "#AA00AA", 6: "#FFAA00", 7: "#AAAAAA",
+    8: "#555555", 9: "#5555FF", a: "#55FF55", b: "#55FFFF", c: "#FF5555", d: "#FF55FF", e: "#FFFF55", f: "#FFFFFF" };
+
+  function renderMc(target, text, baseColor) {
+    target.textContent = "";
+    let st = { color: baseColor, b: false, i: false, u: false, s: false, k: false };
+    const fresh = () => ({ color: baseColor, b: false, i: false, u: false, s: false, k: false });
+    let buf = "";
+    const flush = () => {
+      if (!buf) return;
+      const span = document.createElement("span");
+      span.textContent = buf;
+      span.style.color = st.color;
+      if (st.b) span.className = "b";
+      if (st.i) span.classList.add("i");
+      const deco = [st.u && "underline", st.s && "line-through"].filter(Boolean).join(" ");
+      if (deco) span.style.textDecoration = deco;
+      if (st.k) span.dataset.k = buf;
+      target.appendChild(span);
+      buf = "";
+    };
+    const chars = [...text];
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === "§" && i + 1 < chars.length) {
+        const code = chars[++i].toLowerCase();
+        flush();
+        if (code in COLORS) { st = fresh(); st.color = COLORS[code]; }
+        else if (code === "l") st.b = true;
+        else if (code === "o") st.i = true;
+        else if (code === "n") st.u = true;
+        else if (code === "m") st.s = true;
+        else if (code === "k") st.k = true;
+        else if (code === "r") st = fresh();
+        continue;
+      }
+      buf += chars[i];
+    }
+    flush();
+  }
+
+  // §k: obfuscated text flickers like in game.
+  setInterval(() => {
+    const glyphs = "!#$%&*+/<=>?@ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
+    for (const span of document.querySelectorAll("[data-k]")) {
+      span.textContent = [...span.dataset.k].map((c) => c === " " ? " " : glyphs[Math.floor(Math.random() * glyphs.length)]).join("");
+    }
+  }, 90);
+
+  function buildPalettes() {
+    const fmts = [["l", "Bold"], ["o", "Italic"], ["n", "Underline"], ["m", "Strikethrough"], ["k", "Obfuscated"], ["r", "Reset"]];
+    for (const pal of document.querySelectorAll(".palette")) {
+      const target = $(pal.dataset.target);
+      for (const [code, color] of Object.entries(COLORS)) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.title = "§" + code;
+        b.style.background = color;
+        b.style.color = ["0", "1", "4", "5", "8", "2", "3"].includes(code) ? "#fff" : "#000";
+        b.textContent = code;
+        b.onclick = () => insertAtCursor(target, "§" + code);
+        pal.appendChild(b);
+      }
+      for (const [code, label] of fmts) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "fmt";
+        b.title = "§" + code;
+        b.textContent = label;
+        b.onclick = () => insertAtCursor(target, "§" + code);
+        pal.appendChild(b);
+      }
+    }
+  }
+
+  function insertAtCursor(el, text) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    el.focus();
+    el.selectionStart = el.selectionEnd = start + text.length;
+    update();
+  }
+
+  // ---------- UI ----------
+  function human(sec) {
+    if (!Number.isFinite(sec)) return "";
+    if (sec < 60) return `${sec} s`;
+    const m = Math.floor(sec / 60), r = Math.round(sec % 60);
+    if (m < 60) return r ? `${m} min ${r} s` : `${m} min`;
+    const h = Math.floor(m / 60), mm = m % 60;
+    return mm ? `${h} h ${mm} min` : `${h} h`;
+  }
+
+  let current = "";
+  function update() {
+    const s = read();
+    $("addrHost").disabled = $("addrPort").disabled = s.addrAuto;
+    $("builder").hidden = s.cmdMode !== "builder";
+    $("customField").hidden = s.cmdMode !== "custom";
+    $("pctField").hidden = s.memMode !== "pct";
+    $("xmxField").hidden = s.memMode !== "xmx";
+    $("cmdPreview").value = command(s);
+    for (const el of document.querySelectorAll(".suffix[data-for]")) el.textContent = human(s[el.dataset.for]);
+
+    const kick = previewMode === "kick";
+    $("mcEntry").hidden = kick;
+    $("mcKick").hidden = !kick;
+    const serverMotd = s.motdSource === "server";
+    for (const el of document.querySelectorAll("[data-sleepy-motd]")) el.hidden = serverMotd;
+    $("motdSourceHint").hidden = !serverMotd;
+    renderMc($("mcMotd"), serverMotd ? "§7§o(your Minecraft server's MOTD,\n§7§ocolors and plugins included)"
+      : previewMode === "starting" ? s.motdStarting : s.motdSleeping, "#AAAAAA");
+    renderMc($("mcKickText"), s.kickMessage, "#FFFFFF");
+
+    current = toml(s);
+    $("output").innerHTML = highlight(current);
+
+    const { errs, warns } = validate(s);
+    const msgs = $("msgs");
+    msgs.textContent = "";
+    const add = (cls, text) => { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text; msgs.appendChild(d); };
+    errs.forEach((e) => add("err", e));
+    warns.forEach((w) => add("warn", w));
+    if (!errs.length && !warns.length) add("ok", "✓ Valid configuration");
+    $("btnDownload").disabled = errs.length > 0;
+    $("btnDownload").style.opacity = errs.length ? .5 : 1;
+
+    try { localStorage.setItem("sleepy-config-generator", JSON.stringify(s)); } catch (_) { /* storage unavailable */ }
+  }
+
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove("show"), 1600);
+  }
+
+  document.addEventListener("input", update);
+  document.addEventListener("change", update);
+  for (const id of ["cmdMode", "previewMode"]) {
+    $(id).addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (id === "cmdMode" && b.dataset.v === "custom" && cmdMode === "builder") $("customCmd").value = command(read());
+      setSeg(id, b.dataset.v);
+      update();
+    });
+  }
+  $("motdSleeping").addEventListener("focus", () => { setSeg("previewMode", "sleeping"); update(); });
+  $("motdStarting").addEventListener("focus", () => { setSeg("previewMode", "starting"); update(); });
+  $("kickMessage").addEventListener("focus", () => { setSeg("previewMode", "kick"); update(); });
+
+  $("btnCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText(current); toast("Copied to clipboard"); }
+    catch (_) {
+      const r = document.createRange(); r.selectNodeContents($("output"));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      toast("Selected: press Ctrl+C to copy");
+    }
+  };
+  $("btnDownload").onclick = () => {
+    const url = URL.createObjectURL(new Blob([current], { type: "text/plain;charset=utf-8" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "sleepy.toml" });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("sleepy.toml downloaded");
+  };
+  $("btnReset").onclick = () => { write(DEFAULTS); setSeg("previewMode", "sleeping"); update(); toast("Defaults restored"); };
+
+  const dlg = $("importDialog");
+  $("btnImport").onclick = () => { $("importMsgs").textContent = ""; dlg.showModal(); $("importText").focus(); };
+  $("importCancel").onclick = () => dlg.close();
+  $("importFile").onchange = async (e) => { const f = e.target.files[0]; if (f) $("importText").value = await f.text(); };
+  $("importOk").onclick = () => {
+    const box = $("importMsgs");
+    box.textContent = "";
+    try {
+      const { state, unknown } = fromToml(parseToml($("importText").value));
+      write(state);
+      update();
+      dlg.close();
+      toast(unknown.length ? `Imported (ignored: ${unknown.join(", ")})` : "Configuration imported");
+    } catch (err) {
+      const d = document.createElement("div");
+      d.className = "msg err";
+      d.textContent = "Import failed: " + err.message;
+      box.appendChild(d);
+    }
+  };
+
+  buildPalettes();
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("sleepy-config-generator") || "null"); } catch (_) { saved = null; }
+  write({ ...DEFAULTS, ...(saved || {}) });
+  update();
+})();
+</script>
+</body>
+</html>
