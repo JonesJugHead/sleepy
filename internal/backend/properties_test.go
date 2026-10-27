@@ -39,20 +39,20 @@ func TestRewriteServerPropertiesOnDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.properties")
 	os.WriteFile(path, []byte("max-players=42\nserver-port=25565\n"), 0o644)
-	if err := RewriteServerProperties(dir, 30001); err != nil {
+	if err := RewriteServerProperties(dir, "127.0.0.1", 30001); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != "max-players=42\nserver-port=30001\nserver-ip=127.0.0.1\n" {
 		t.Errorf("got %q", got)
 	}
-	if n := ReadMaxPlayers(dir); n != 42 {
-		t.Errorf("max players %d", n)
+	if n, ok := ReadMaxPlayers(dir); n != 42 || !ok {
+		t.Errorf("max players %d %v", n, ok)
 	}
 	empty := t.TempDir()
-	if n := ReadMaxPlayers(empty); n != 20 {
-		t.Errorf("default max players %d", n)
+	if _, ok := ReadMaxPlayers(empty); ok {
+		t.Error("max players found in an empty directory")
 	}
-	RewriteServerProperties(empty, 30002)
+	RewriteServerProperties(empty, "127.0.0.1", 30002)
 	if got, _ := os.ReadFile(filepath.Join(empty, "server.properties")); string(got) != "server-port=30002\nserver-ip=127.0.0.1\n" {
 		t.Errorf("created file %q", got)
 	}

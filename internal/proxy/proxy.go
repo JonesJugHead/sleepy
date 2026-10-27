@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"sleepy/internal/backend"
+	"sleepy/internal/config"
 	"sleepy/internal/logx"
+	"sleepy/internal/power"
 	"sleepy/internal/protocol"
 	"sleepy/internal/settings"
 )
@@ -21,6 +23,12 @@ const (
 	handshakeTimeout = 10 * time.Second
 	// legacyWait: a lone 0xFE may be followed by more bytes from a 1.4+ client.
 	legacyWait = 200 * time.Millisecond
+	// keepAliveChannel is unknown to clients, which answer "not understood".
+	keepAliveChannel = "sleepy:wait"
+	// legacyHoldLimit: clients before 1.13 cannot be kept waiting past their 30 s timeout.
+	legacyHoldLimit = 25 * time.Second
+	// answersTimeout: how long the last keep-alive answers may take once the server is ready.
+	answersTimeout = 5 * time.Second
 )
 
 type Proxy struct {
@@ -29,6 +37,8 @@ type Proxy struct {
 	// ResolveBackend picks the backend for a connection (nil handshake for legacy pings).
 	// Single backend in v1; routing by handshake address goes here later.
 	ResolveBackend func(*protocol.Handshake) *backend.Backend
+	// Power is the shared state directory ([power]); nil when off.
+	Power *power.Dir
 }
 
 // Serve accepts connections until the listener is closed.
@@ -46,6 +56,10 @@ func (p *Proxy) Serve(ln net.Listener) {
 		go p.handle(conn)
 	}
 }
+
+// keepAliveInterval: how often a waiting 1.13+ client gets a login plugin request, well within
+// its 30 s read timeout (shorter in tests).
+var keepAliveInterval = 10 * time.Second
 
 var protocolErrorf = protocol.Errorf
 
@@ -106,7 +120,7 @@ func (p *Proxy) dispatch(c *clientConn, peer string) error {
 			relay(c.Conn, concat(hsPacket.Raw, c.reader.Drain()), b, "", nil)
 			return nil
 		}
-		return serveStatus(c, localStatusJSON(b, p.Settings.Config().Motd, hs.ProtocolVersion))
+		return serveStatus(c, localStatusJSON(b, p.Settings.Config().Motd, p.Power.AdminStopped(), hs.ProtocolVersion))
 
 	case protocol.IntentLogin, protocol.IntentTransfer:
 		loginPacket, err := c.next()
@@ -117,19 +131,21 @@ func (p *Proxy) dispatch(c *clientConn, peer string) error {
 		if err != nil {
 			return err
 		}
-		p.handleLogin(c, b, username, peer, func() []byte { return concat(hsPacket.Raw, loginPacket.Raw, c.reader.Drain()) })
+		p.handleLogin(c, b, hs.ProtocolVersion, username, peer, concat(hsPacket.Raw, loginPacket.Raw))
 		return nil
 	}
 	return protocolErrorf("unknown handshake intent %d", hs.Intent)
 }
 
-func (p *Proxy) handleLogin(c *clientConn, b *backend.Backend, username, peer string, replay func() []byte) {
+// handleLogin relays a player, waking the server up first if needed. prefix holds the handshake and
+// login start, replayed to the server before anything else the client sent.
+func (p *Proxy) handleLogin(c *clientConn, b *backend.Backend, protocolVersion int32, username, peer string, prefix []byte) {
 	cfg := p.Settings.Config()
 	kick := protocol.EncodeLoginDisconnect(cfg.KickMessage)
 
 	if b.State() == backend.Ready {
 		c.SetReadDeadline(time.Time{})
-		relay(c.Conn, replay(), b, username, kick)
+		relay(c.Conn, concat(prefix, c.reader.Drain()), b, username, kick)
 		return
 	}
 
@@ -140,23 +156,33 @@ func (p *Proxy) handleLogin(c *clientConn, b *backend.Backend, username, peer st
 		return
 	}
 
+	// A server that is down or going down is only (re)started if the power directory allows it.
+	if state := b.State(); state == backend.Sleeping || state == backend.Stopping {
+		if why := p.Power.WakeBlocked(); why != power.None {
+			logx.Printf("%s (%s) cannot wake the server: %s", username, peer, power.Describe(why))
+			c.Write(protocol.EncodeLoginDisconnect(blockedMessage(cfg.Power, why)))
+			return
+		}
+	}
+
 	logx.Printf("%s (%s) is waiting for the server", username, peer)
 	if !b.Start(username + " is connecting") {
 		c.Write(kick)
 		return
 	}
 
-	closed, stopWatching := c.watchClose()
-	ready := b.WaitReady(cfg.HoldTimeout, closed)
-	stopWatching()
-	select {
-	case <-closed:
+	keepAlive := protocolVersion >= protocol.LoginPluginMinProtocol
+	hold := cfg.HoldTimeout
+	if !keepAlive && hold > legacyHoldLimit {
+		hold = legacyHoldLimit
+	}
+	ready, left, sent := p.wait(c, b, hold, keepAlive)
+	if left {
 		logx.Printf("%s left before the server was ready", username)
 		return
-	default:
 	}
 	if !ready {
-		why := fmt.Sprintf("Server not ready within %v", cfg.HoldTimeout)
+		why := fmt.Sprintf("Server not ready within %v", hold)
 		if b.State() == backend.Sleeping {
 			why = "Server failed to start"
 		}
@@ -164,7 +190,57 @@ func (p *Proxy) handleLogin(c *clientConn, b *backend.Backend, username, peer st
 		c.Write(kick)
 		return
 	}
-	relay(c.Conn, replay(), b, username, kick)
+	rest, err := c.takeKeepAliveAnswers(sent, answersTimeout)
+	if err != nil {
+		logx.Printf("%s did not answer while waiting (%v), asking to reconnect", username, err)
+		c.Write(kick)
+		return
+	}
+	relay(c.Conn, concat(prefix, rest), b, username, kick)
+}
+
+// wait holds a player until the server is ready, the hold expires, the server fails or the player
+// leaves. With keepAlive, a login plugin request is sent every keepAliveInterval; sent is how many.
+func (p *Proxy) wait(c *clientConn, b *backend.Backend, hold time.Duration, keepAlive bool) (ready, left bool, sent int32) {
+	deadline := time.Now().Add(hold)
+	closed, stopWatching := c.watchClose()
+	defer stopWatching()
+	for {
+		step := time.Until(deadline)
+		if step <= 0 {
+			return false, false, sent
+		}
+		if keepAlive && step > keepAliveInterval {
+			step = keepAliveInterval
+		}
+		if b.WaitReady(step, closed) {
+			return true, false, sent
+		}
+		select {
+		case <-closed:
+			return false, true, sent
+		default:
+		}
+		if b.State() == backend.Sleeping {
+			return false, false, sent // the start failed
+		}
+		if keepAlive && time.Until(deadline) > 0 {
+			sent++
+			if _, err := c.Write(protocol.EncodeLoginPluginRequest(sent, keepAliveChannel)); err != nil {
+				return false, true, sent
+			}
+		}
+	}
+}
+
+func blockedMessage(cfg config.Power, why string) string {
+	switch why {
+	case power.Backup:
+		return cfg.BackupMessage
+	case power.Restore:
+		return cfg.RestoreMessage
+	}
+	return cfg.StoppedMessage
 }
 
 func (p *Proxy) handleLegacyPing(c *clientConn) error {
@@ -185,7 +261,7 @@ func (p *Proxy) handleLegacyPing(c *clientConn) error {
 		relay(c.Conn, c.reader.Drain(), b, "", nil)
 		return nil
 	}
-	_, err := c.Write(protocol.EncodeLegacyResponse(ping, localLegacyStatus(b, p.Settings.Config().Motd)))
+	_, err := c.Write(protocol.EncodeLegacyResponse(ping, localLegacyStatus(b, p.Settings.Config().Motd, p.Power.AdminStopped())))
 	return err
 }
 

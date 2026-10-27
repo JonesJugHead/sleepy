@@ -33,6 +33,25 @@ func ConfigureProxyProtocol(directory, mode string) (active, changed bool, err e
 	return want, true, os.WriteFile(path, []byte(updated), 0o644)
 }
 
+// ReadProxyProtocol is ConfigureProxyProtocol without writing (docker: the server files belong to
+// the container): "auto" follows proxies.proxy-protocol in paper-global.yml if the file is there.
+func ReadProxyProtocol(directory, mode string) (bool, error) {
+	if mode != "auto" {
+		return mode == "on", nil
+	}
+	content, err := os.ReadFile(filepath.Join(directory, paperGlobalConfig))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return paperProxyProtocolEnabled.MatchString(string(content)), nil
+}
+
+// paperProxyProtocolEnabled matches the key enabled anywhere under proxies: (its only use there).
+var paperProxyProtocolEnabled = regexp.MustCompile(`(?m)^\s+proxy-protocol:\s*true\s*$`)
+
 var proxyProtocolLine = regexp.MustCompile(`^proxy-protocol:`)
 
 // setPaperProxyProtocol sets proxies.proxy-protocol in paper-global.yml, touching nothing else.

@@ -3,7 +3,6 @@ package proxy
 import (
 	"io"
 	"net"
-	"strconv"
 	"time"
 
 	"sleepy/internal/backend"
@@ -14,16 +13,16 @@ import (
 // closeGrace: once one side has finished, how long the other gets to finish too before both close.
 const closeGrace = 5 * time.Second
 
-// relay connects to the local server, replays the bytes already read from the client (handshake,
+// relay connects to the server, replays the bytes already read from the client (handshake,
 // login start, anything buffered after), then copies both ways without looking at the data.
 // player is set for player connections (counted for inactivity); failPacket is sent to the client
-// if the local server cannot be reached.
+// if the server cannot be reached.
 func relay(client net.Conn, replay []byte, b *backend.Backend, player string, failPacket []byte) {
 	defer client.Close()
-	upstream, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(b.Port())), 5*time.Second)
+	upstream, err := net.DialTimeout("tcp", b.Address(), 5*time.Second)
 	if err != nil {
 		if player != "" {
-			logx.Printf("Cannot reach the local server for %s: %v", player, err)
+			logx.Printf("Cannot reach the server for %s: %v", player, err)
 		}
 		if failPacket != nil {
 			client.Write(failPacket)

@@ -1,5 +1,5 @@
 // Package settings holds what can change while Sleepy runs: the reloadable config, and the state
-// that persists across restarts in a small file (auto-sleep switch, remembered server MOTD).
+// that persists across restarts in a small file (auto-sleep switch, remembered server status).
 package settings
 
 import (
@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"sleepy/internal/backend"
 	"sleepy/internal/config"
 	"sleepy/internal/logx"
 )
@@ -23,8 +24,9 @@ type Store struct {
 
 type state struct {
 	AutoSleep bool `json:"auto_sleep"`
-	// ServerMotd is the real server's MOTD as last seen, shown with motd.source = "server".
-	ServerMotd json.RawMessage `json:"server_motd,omitempty"`
+	// ServerStatus is the real server's status as last seen (MOTD, favicon, max players), shown
+	// while it sleeps.
+	ServerStatus backend.ServerStatus `json:"server_status"`
 }
 
 // Open loads the persisted state from statePath (defaults if the file does not exist).
@@ -68,10 +70,10 @@ func (s *Store) AutoSleep() bool {
 	return s.state.AutoSleep
 }
 
-func (s *Store) ServerMotd() json.RawMessage {
+func (s *Store) ServerStatus() backend.ServerStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.state.ServerMotd
+	return s.state.ServerStatus
 }
 
 func (s *Store) SetConfig(cfg *config.Config) {
@@ -90,13 +92,13 @@ func (s *Store) SetAutoSleep(on bool) error {
 	return s.saveLocked()
 }
 
-// SetServerMotd remembers the real server's MOTD across restarts.
-func (s *Store) SetServerMotd(motd json.RawMessage) {
+// SetServerStatus remembers the real server's status across restarts.
+func (s *Store) SetServerStatus(status backend.ServerStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.state.ServerMotd = motd
+	s.state.ServerStatus = status
 	if err := s.saveLocked(); err != nil {
-		logx.Printf("Cannot save the server MOTD to %s: %v", s.statePath, err)
+		logx.Printf("Cannot save the server status to %s: %v", s.statePath, err)
 	}
 }
 

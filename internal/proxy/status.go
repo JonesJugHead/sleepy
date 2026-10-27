@@ -25,7 +25,7 @@ func currentMotd(b *backend.Backend, motd config.Motd) string {
 // serverMotd returns the real server's MOTD for motd.source = "server": the one remembered from
 // its last run, else motd= from server.properties. ok is false when neither is available.
 func serverMotd(b *backend.Backend) (description json.RawMessage, text string, ok bool) {
-	if d := b.ServerDescription(); len(d) > 0 {
+	if d := b.RememberedStatus().Description; len(d) > 0 {
 		return d, protocol.PlainText(d), true
 	}
 	if m := backend.ReadMotd(b.Directory()); m != "" {
@@ -34,15 +34,19 @@ func serverMotd(b *backend.Backend) (description json.RawMessage, text string, o
 	return nil, "", false
 }
 
-func localStatusJSON(b *backend.Backend, motd config.Motd, clientProtocol int32) string {
+// adminStopped: an administrator keeps the server stopped ([power]), shown whatever motd.source.
+func localStatusJSON(b *backend.Backend, motd config.Motd, adminStopped bool, clientProtocol int32) string {
 	info := protocol.StatusInfo{
 		VersionName: motd.VersionName,
 		Protocol:    clientProtocol,
 		Motd:        currentMotd(b, motd),
-		Max:         backend.ReadMaxPlayers(b.Directory()),
-		Favicon:     readFavicon(b.Directory()),
+		Max:         maxPlayers(b),
+		Favicon:     favicon(b),
 	}
-	if motd.Source == "server" {
+	switch {
+	case adminStopped && b.State() == backend.Sleeping:
+		info.Motd = motd.Stopped
+	case motd.Source == "server":
 		if description, text, ok := serverMotd(b); ok {
 			info.Description, info.Motd = description, text
 		}
@@ -50,9 +54,12 @@ func localStatusJSON(b *backend.Backend, motd config.Motd, clientProtocol int32)
 	return protocol.BuildStatusJSON(info)
 }
 
-func localLegacyStatus(b *backend.Backend, motd config.Motd) protocol.LegacyStatus {
+func localLegacyStatus(b *backend.Backend, motd config.Motd, adminStopped bool) protocol.LegacyStatus {
 	text := currentMotd(b, motd)
-	if motd.Source == "server" {
+	switch {
+	case adminStopped && b.State() == backend.Sleeping:
+		text = motd.Stopped
+	case motd.Source == "server":
 		if _, t, ok := serverMotd(b); ok {
 			text = t
 		}
@@ -60,8 +67,28 @@ func localLegacyStatus(b *backend.Backend, motd config.Motd) protocol.LegacyStat
 	return protocol.LegacyStatus{
 		Motd:        text,
 		VersionName: motd.VersionName,
-		Max:         backend.ReadMaxPlayers(b.Directory()),
+		Max:         maxPlayers(b),
 	}
+}
+
+// maxPlayers: max-players from server.properties, else the remembered status (docker without the
+// server files), else 20.
+func maxPlayers(b *backend.Backend) int {
+	if n, ok := backend.ReadMaxPlayers(b.Directory()); ok {
+		return n
+	}
+	if n := b.RememberedStatus().MaxPlayers; n > 0 {
+		return n
+	}
+	return 20
+}
+
+// favicon: server-icon.png, else the icon remembered from the server's status.
+func favicon(b *backend.Backend) string {
+	if f := readFavicon(b.Directory()); f != "" {
+		return f
+	}
+	return b.RememberedStatus().Favicon
 }
 
 func readFavicon(directory string) string {

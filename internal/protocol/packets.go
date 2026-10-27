@@ -175,3 +175,29 @@ func BuildStatusJSON(info StatusInfo) string {
 	})
 	return string(b)
 }
+
+// Login plugin messages (1.13+, protocol 393): Sleepy sends requests on an unknown channel while a
+// player waits, which keeps the client from timing out (it resets its 30 s read timeout on every
+// packet). The client answers each one with "not understood".
+const (
+	LoginPluginMinProtocol = 393
+	LoginPluginRequestID   = 0x04
+	LoginPluginResponseID  = 0x02
+)
+
+func EncodeLoginPluginRequest(messageID int32, channel string) []byte {
+	return EncodePacket(LoginPluginRequestID, AppendVarInt(nil, messageID), AppendString(nil, channel))
+}
+
+// DecodeLoginPluginResponse returns the message id of a login plugin response.
+func DecodeLoginPluginResponse(p *RawPacket) (int32, error) {
+	if p.ID != LoginPluginResponseID {
+		return 0, errorf("not a login plugin response: packet 0x%x", p.ID)
+	}
+	return NewCursor(p.Data).ReadVarInt()
+}
+
+// EncodeLoginPluginResponse is what a client sends back (tests).
+func EncodeLoginPluginResponse(messageID int32) []byte {
+	return EncodePacket(LoginPluginResponseID, AppendVarInt(nil, messageID), []byte{0})
+}

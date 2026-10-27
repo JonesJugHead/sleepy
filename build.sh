@@ -4,7 +4,8 @@
 set -e
 cd "$(dirname "$0")"
 OUT="dist/sleepy-v$(cat VERSION)"
-BUILD="go build -trimpath -ldflags='-s -w' -o $OUT ."
+# timetzdata embeds the time zone database: TZ works where the system has none (sleepy.json dates).
+BUILD="go build -trimpath -tags timetzdata -ldflags='-s -w' -o $OUT ."
 if command -v go >/dev/null 2>&1; then
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 sh -c "$BUILD"
 else

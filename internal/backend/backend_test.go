@@ -44,7 +44,7 @@ func record(b *Backend) *stateRecorder {
 func makeBackend(t *testing.T, env map[string]string, stopTimeout time.Duration) (*Backend, string) {
 	t.Helper()
 	dir := testutil.TempServerDir(t, map[string]string{"server.properties": "server-port=25565\n"})
-	b := New("test", config.Backend{Command: testutil.FakeServerCommand(env), Port: testutil.FreePort(t), Directory: dir}, stopTimeout)
+	b := New("test", config.Backend{Type: config.TypeProcess, Command: testutil.FakeServerCommand(env), Host: "127.0.0.1", Port: testutil.FreePort(t), Directory: dir}, stopTimeout)
 	t.Cleanup(func() { <-b.Stop("test cleanup") })
 	return b, dir
 }
@@ -56,7 +56,7 @@ func TestLifecycle(t *testing.T) {
 		t.Fatal("not starting")
 	}
 	props, _ := os.ReadFile(filepath.Join(dir, "server.properties"))
-	if !strings.Contains(string(props), "server-port="+strconv.Itoa(b.Port())+"\nserver-ip=127.0.0.1") {
+	if !strings.Contains(string(props), "server-port="+strconv.Itoa(b.cfg.Port)+"\nserver-ip=127.0.0.1") {
 		t.Fatalf("server.properties not rewritten: %q", props)
 	}
 	if !b.WaitReady(5*time.Second, nil) {

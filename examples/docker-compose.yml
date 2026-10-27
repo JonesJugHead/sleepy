@@ -1,0 +1,49 @@
+# Sleepy in front of a Minecraft server container (itzg/minecraft-server or any other image).
+# The server container ("mc") must not publish 25565 itself: Sleepy does.
+#
+#   mc:
+#     image: itzg/minecraft-server:java21
+#     container_name: mc
+#     stdin_open: true          # lets Sleepy forward console commands
+#     stop_grace_period: 180s   # >= stop_timeout in sleepy.toml
+#     networks: [web]           # no "ports:" here
+services:
+  sleepy:
+    build: https://github.com/JonesJugHead/sleepy.git#main
+    container_name: sleepy
+    restart: unless-stopped
+    user: "1000:1000"
+    # Lets `docker attach sleepy` reach the Sleepy console (sleepy status, sleepy wake...).
+    stdin_open: true
+    ports: ["25565:25565"]
+    environment:
+      DOCKER_HOST: tcp://sleepy-docker:2375
+      TZ: Europe/Brussels
+    volumes:
+      # sleepy.toml + sleepy-state.json, owned by 1000:1000.
+      - /opt/sleepy:/data
+      # Optional [power] directory shared with a panel and backup scripts.
+      - /var/lib/mc-power:/var/lib/mc-power
+    networks: [web, sleepy-docker]
+    depends_on: [sleepy-docker]
+
+  # Docker API access without giving Sleepy the socket itself.
+  sleepy-docker:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: sleepy-docker
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1   # inspect
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      # Console commands typed into Sleepy use the attach endpoint, which needs POST.
+      # Without it everything else works; Sleepy logs that the command could not be sent.
+      POST: 1
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    networks: [sleepy-docker]
+
+networks:
+  web:
+    external: true
+  sleepy-docker:
+    internal: true

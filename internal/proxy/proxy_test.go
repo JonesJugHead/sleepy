@@ -17,6 +17,7 @@ import (
 
 	"sleepy/internal/backend"
 	"sleepy/internal/config"
+	"sleepy/internal/power"
 	"sleepy/internal/protocol"
 	"sleepy/internal/settings"
 	"sleepy/internal/testutil"
@@ -47,8 +48,14 @@ func newSetupFull(t *testing.T, env map[string]string, toml, backendTOML string,
 		all[name] = content
 	}
 	dir := testutil.TempServerDir(t, all)
-	text := fmt.Sprintf("public_address = \"127.0.0.1:%d\"\n%s\n[backend]\ncommand = %q\nport = %d\ndirectory = %q\n%s\n",
+	text := fmt.Sprintf("public_address = \"127.0.0.1:%d\"\n%s\n[backend]\ncommand = %q\naddress = \"127.0.0.1:%d\"\ndirectory = %q\n%s\n",
 		port, toml, testutil.FakeServerCommand(env), testutil.FreePort(t), dir, backendTOML)
+	return serve(t, text, port, dir)
+}
+
+// serve runs a proxy for the config text on port.
+func serve(t *testing.T, text string, port int, dir string) *setup {
+	t.Helper()
 	cfg, err := config.Parse(text, "")
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +66,7 @@ func newSetupFull(t *testing.T, env map[string]string, toml, backendTOML string,
 		t.Fatal(err)
 	}
 	store := settings.Open(cfg, filepath.Join(t.TempDir(), "state.json"))
-	go (&Proxy{Settings: store, ResolveBackend: func(*protocol.Handshake) *backend.Backend { return b }}).Serve(ln)
+	go (&Proxy{Settings: store, Power: power.Open(cfg.Power.Directory), ResolveBackend: func(*protocol.Handshake) *backend.Backend { return b }}).Serve(ln)
 	t.Cleanup(func() {
 		ln.Close()
 		<-b.Stop("test cleanup")
@@ -314,7 +321,7 @@ func TestMotdSourceServer(t *testing.T) {
 	// Once the server has run, its real MOTD (the fake server's) is remembered and shown asleep.
 	s.backend.Start("test")
 	s.backend.WaitReady(5*time.Second, nil)
-	testutil.Until(t, 3*time.Second, func() bool { return len(s.backend.ServerDescription()) > 0 })
+	testutil.Until(t, 3*time.Second, func() bool { return len(s.backend.RememberedStatus().Description) > 0 })
 	<-s.backend.Stop("test")
 	if got := description(); got != `{"text":"fake"}` {
 		t.Fatalf("after a run: %s", got)

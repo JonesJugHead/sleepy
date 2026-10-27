@@ -228,7 +228,7 @@
       <div class="grid">
         <label class="field full">
           <span class="switch"><input type="checkbox" id="addrAuto" checked><span class="label">Automatic public address</span></span>
-          <span class="hint">Sleepy listens on <code>0.0.0.0</code> and the port allocated by Pterodactyl (<code>SERVER_PORT</code> variable). Leave checked on Pterodactyl.</span>
+          <span class="hint">Sleepy listens on <code>0.0.0.0</code> and the port allocated by Pterodactyl (<code>SERVER_PORT</code> variable, 25565 if unset). Leave checked on Pterodactyl.</span>
         </label>
         <label class="field">
           <span class="label">Listen IP</span>
@@ -239,24 +239,46 @@
           <input type="number" id="addrPort" value="25565" min="1" max="65535" disabled>
         </label>
         <label class="field">
-          <span class="label">Local Minecraft server port</span>
-          <input type="number" id="backendPort" value="25566" min="1" max="65535">
-          <span class="hint">Written to <code>server.properties</code>, bound to 127.0.0.1 only. Must differ from the public port.</span>
-        </label>
-        <label class="field">
           <span class="label">Forward real player IP</span>
           <select id="proxyProtocol">
             <option value="auto">auto (Paper and forks)</option>
             <option value="on">on (always)</option>
             <option value="off">off (never)</option>
           </select>
-          <span class="hint">PROXY protocol: Paper sees the players' IP instead of 127.0.0.1.</span>
+          <span class="hint">PROXY protocol: the server sees the players' IP instead of Sleepy's.</span>
         </label>
       </div>
     </section>
 
     <section class="card">
       <h2>Minecraft server</h2>
+      <div class="grid" style="margin-bottom:12px">
+        <label class="field">
+          <span class="label">How Sleepy runs it</span>
+          <select id="backendType">
+            <option value="process">process: Sleepy runs Java (Pterodactyl, systemd...)</option>
+            <option value="docker">docker: an existing container</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Server address</span>
+          <input type="text" id="backendAddress" value="127.0.0.1:25566">
+          <span class="hint" id="addressHint"></span>
+        </label>
+      </div>
+      <div class="grid" id="dockerFields" hidden>
+        <label class="field">
+          <span class="label">Container</span>
+          <input type="text" id="container" value="mc">
+          <span class="hint">Name or ID. Remove its <code>ports:</code>: Sleepy publishes 25565.</span>
+        </label>
+        <label class="field">
+          <span class="label">Docker API</span>
+          <input type="text" id="dockerEndpoint" value="" placeholder="$DOCKER_HOST or /var/run/docker.sock">
+          <span class="hint"><code>unix:///var/run/docker.sock</code>, <code>tcp://docker-socket-proxy:2375</code>, or empty.</span>
+        </label>
+      </div>
+      <div id="processFields">
       <div class="row" style="margin-bottom:12px">
         <div class="seg" id="cmdMode">
           <button type="button" data-v="builder" class="on">Builder</button>
@@ -302,10 +324,11 @@
         <span class="label">Generated command</span>
         <textarea id="cmdPreview" rows="2" readonly></textarea>
       </label>
+      </div>
       <label class="field" style="margin-top:12px">
         <span class="label">Server directory</span>
         <input type="text" id="directory" value=".">
-        <span class="hint">Relative to Sleepy's directory. <code>.</code> on Pterodactyl.</span>
+        <span class="hint" id="directoryHint">Relative to Sleepy's directory. <code>.</code> on Pterodactyl.</span>
       </label>
     </section>
 
@@ -324,13 +347,49 @@
         </label>
         <label class="field">
           <span class="label">Player hold on wake-up</span>
-          <div class="with-suffix"><input type="number" id="holdTimeout" value="25" min="0" step="1"><span class="suffix" data-for="holdTimeout"></span></div>
-          <span class="hint">The client gives up around 30 s.</span>
+          <div class="with-suffix"><input type="number" id="holdTimeout" value="180" min="0" step="1"><span class="suffix" data-for="holdTimeout"></span></div>
+          <span class="hint">1.13+ clients are kept waiting that long (modded starts); older ones 25 s at most.</span>
         </label>
         <label class="field">
           <span class="label">Stop timeout</span>
           <div class="with-suffix"><input type="number" id="stopTimeout" value="60" min="0" step="1"><span class="suffix" data-for="stopTimeout"></span></div>
-          <span class="hint">After <code>stop</code>, before SIGTERM.</span>
+          <span class="hint" id="stopHint">After <code>stop</code>, before SIGTERM.</span>
+        </label>
+        <label class="field full">
+          <span class="label">Busy check (optional)</span>
+          <input type="text" id="busyCommand" value="" placeholder="e.g. test -f /var/lib/render/running">
+          <span class="hint">Run through <code>sh</code> before sleeping: exit code 0 = busy, sleep is postponed. Its first output line is logged.</span>
+        </label>
+        <label class="field">
+          <span class="label">Check again every</span>
+          <div class="with-suffix"><input type="number" id="busyRetry" value="900" min="1" step="1"><span class="suffix" data-for="busyRetry"></span></div>
+        </label>
+        <label class="field">
+          <span class="label">Sleep anyway after</span>
+          <div class="with-suffix"><input type="number" id="busyMaxDelay" value="10800" min="0" step="1"><span class="suffix" data-for="busyMaxDelay"></span></div>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Panel and backups (optional)</h2>
+      <div class="grid">
+        <label class="field full">
+          <span class="label">Power directory</span>
+          <input type="text" id="powerDir" value="" placeholder="e.g. /var/lib/mc-power (empty: off)">
+          <span class="hint">Shared with a panel and scripts: <code>admin.json</code> (<code>"stopped"</code> = never wake), <code>backup.lock</code>, <code>restore.lock</code>, <code>keep-awake</code>; Sleepy writes <code>sleepy.json</code>.</span>
+        </label>
+        <label class="field full" data-power>
+          <span class="label">Message: stopped by an administrator</span>
+          <input type="text" id="stoppedMessage" value="The server was stopped by an administrator">
+        </label>
+        <label class="field" data-power>
+          <span class="label">Message: backup</span>
+          <input type="text" id="backupMessage" value="Backup in progress, try again in a minute">
+        </label>
+        <label class="field" data-power>
+          <span class="label">Message: restore</span>
+          <input type="text" id="restoreMessage" value="Restore in progress, try again in a few minutes">
         </label>
       </div>
     </section>
@@ -356,6 +415,11 @@
           <textarea id="motdStarting" rows="2" data-motd>§eServer is starting...</textarea>
           <div class="palette" data-target="motdStarting"></div>
         </label>
+        <label class="field full" data-power>
+          <span class="label">MOTD while stopped by an administrator</span>
+          <textarea id="motdStopped" rows="2" data-motd>§cServer stopped by an administrator</textarea>
+          <div class="palette" data-target="motdStopped"></div>
+        </label>
         <label class="field">
           <span class="label">Displayed version name</span>
           <input type="text" id="versionName" value="Sleepy">
@@ -380,6 +444,7 @@
         <div class="seg" id="previewMode">
           <button type="button" data-v="sleeping" class="on">Asleep</button>
           <button type="button" data-v="starting">Starting</button>
+          <button type="button" data-v="stopped">Stopped</button>
           <button type="button" data-v="kick">Message</button>
         </div>
       </div>
@@ -437,16 +502,22 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
 
-  // Mirrors defaults() in internal/config/config.go (v0.0.4).
+  // Mirrors defaults() in internal/config/config.go (v0.1.0).
   const DEFAULTS = {
     addrAuto: true, addrHost: "0.0.0.0", addrPort: 25565,
-    backendPort: 25566, proxyProtocol: "auto",
+    proxyProtocol: "auto",
+    backendType: "process", backendAddress: "127.0.0.1:25566", container: "mc", dockerEndpoint: "",
     cmdMode: "builder", jar: "server.jar", memMode: "pct", memPct: 85, xmx: 2048, xms: 128, aikar: false,
     customCmd: "java -Xms128M -XX:MaxRAMPercentage=85.0 -jar server.jar nogui",
     directory: ".",
-    sleepAfter: 300, minOnline: 60, holdTimeout: 25, stopTimeout: 60,
+    sleepAfter: 300, minOnline: 60, holdTimeout: 180, stopTimeout: 60,
+    busyCommand: "", busyRetry: 900, busyMaxDelay: 10800,
+    powerDir: "", stoppedMessage: "The server was stopped by an administrator",
+    backupMessage: "Backup in progress, try again in a minute",
+    restoreMessage: "Restore in progress, try again in a few minutes",
     motdSleeping: "§7Server is asleep §8- §ajoin to wake it up",
     motdStarting: "§eServer is starting...",
+    motdStopped: "§cServer stopped by an administrator",
     motdSource: "sleepy", versionName: "Sleepy", whitelistOnly: false,
     kickMessage: "The server is starting, reconnect in a few seconds",
   };
@@ -516,18 +587,34 @@
 
   function toml(s) {
     const address = s.addrAuto ? "" : `${s.addrHost.trim()}:${s.addrPort}`;
+    const docker = s.backendType === "docker";
+    const backend = docker
+      ? `# docker: name or ID of the server container.
+container = ${tomlString(s.container.trim())}
+# docker: Docker API address. Empty: $DOCKER_HOST, else unix:///var/run/docker.sock.
+docker_endpoint = ${tomlString(s.dockerEndpoint.trim())}`
+      : `# process: command that starts the Minecraft server, run through sh in backend.directory.
+command = ${tomlString(command(s))}`;
+    const power = s.powerDir.trim() ? `
+[power]
+# State directory shared with a panel and backup scripts (admin.json, backup.lock, restore.lock,
+# keep-awake; Sleepy writes sleepy.json).
+directory = ${tomlString(s.powerDir.trim())}
+stopped_message = ${tomlString(s.stoppedMessage)}
+backup_message = ${tomlString(s.backupMessage)}
+restore_message = ${tomlString(s.restoreMessage)}
+` : "";
     return `# Sleepy configuration (generated by the config generator).
-# All paths are relative to the current directory (the Pterodactyl server root).
+# All paths are relative to the current directory.
 
-# Public address Sleepy listens on (the port allocated by Pterodactyl).
-# Leave empty to use 0.0.0.0 and the SERVER_PORT variable set by Pterodactyl (25565 if unset).
+# Public address Sleepy listens on. Empty: 0.0.0.0 and the SERVER_PORT variable (25565 if unset).
 public_address = ${tomlString(address)}
 
 # Sent to a waiting player when the server did not become ready within hold_timeout,
 # and to players who are not allowed to wake the server (whitelist_only).
 kick_message = ${tomlString(s.kickMessage)}
 
-# Seconds a connecting player is held while the server starts (the client gives up around 30).
+# Seconds a connecting player is held while the server starts (1.13+ clients; older ones 25 s).
 hold_timeout = ${num(s.holdTimeout)}
 
 # Seconds with no players before the server is stopped.
@@ -536,33 +623,41 @@ sleep_after = ${num(s.sleepAfter)}
 # Never stop a server that has been running for less than this many seconds.
 minimum_online_time = ${num(s.minOnline)}
 
-# Seconds to wait after sending "stop" before sending SIGTERM (then SIGKILL as a last resort).
+# Seconds the server gets to stop cleanly (process: "stop" then SIGTERM; docker: docker stop timeout).
 stop_timeout = ${num(s.stopTimeout)}
 
 # Only players listed in whitelist.json can wake the server up.
 whitelist_only = ${s.whitelistOnly}
 
+# Run before sleeping: exit code 0 = busy, retried every busy_retry s for at most busy_max_delay s.
+busy_command = ${tomlString(s.busyCommand.trim())}
+busy_retry = ${num(s.busyRetry)}
+busy_max_delay = ${num(s.busyMaxDelay)}
+
 [backend]
-# Command that starts the Minecraft server, run through sh in the backend directory.
-command = ${tomlString(command(s))}
-# Local port the Minecraft server listens on (written to server.properties, bound to 127.0.0.1).
-port = ${num(s.backendPort)}
-# Directory containing server.properties, server.jar, whitelist.json and server-icon.png.
+# "process" (Sleepy runs the server) or "docker" (an existing container).
+type = ${tomlString(s.backendType)}
+# Where Sleepy reaches the Minecraft server, as host:port.
+address = ${tomlString(s.backendAddress.trim())}
+# Directory containing server.properties, whitelist.json and server-icon.png (read only with docker).
 directory = ${tomlString(s.directory)}
 # Forward the players' real IP with the PROXY protocol: "auto" (Paper and forks), "on" or "off".
 proxy_protocol = ${tomlString(s.proxyProtocol)}
+${backend}
 
 [motd]
 # Which MOTD the server list shows while the server is asleep or starting:
-#   "sleepy": the two messages below.
+#   "sleepy": the messages below.
 #   "server": the real server's MOTD, remembered each time it runs (motd= in server.properties until then).
 source = ${tomlString(s.motdSource)}
 # Shown in the server list while the server is asleep / starting. Supports § color codes.
 sleeping = ${tomlString(s.motdSleeping)}
 starting = ${tomlString(s.motdStarting)}
+# Shown while an administrator keeps the server stopped ([power]).
+stopped = ${tomlString(s.motdStopped)}
 # Version name shown in the server list while Sleepy answers on behalf of the server.
 version_name = ${tomlString(s.versionName)}
-`;
+${power}`;
   }
 
   function highlight(text) {
@@ -626,8 +721,11 @@ version_name = ${tomlString(s.versionName)}
   function fromToml(t) {
     const s = { ...DEFAULTS };
     const known = ["public_address", "kick_message", "hold_timeout", "sleep_after", "minimum_online_time", "stop_timeout",
-      "whitelist_only", "backend.command", "backend.port", "backend.directory", "backend.proxy_protocol",
-      "motd.source", "motd.sleeping", "motd.starting", "motd.version_name"];
+      "whitelist_only", "busy_command", "busy_retry", "busy_max_delay",
+      "backend.type", "backend.address", "backend.command", "backend.container", "backend.docker_endpoint",
+      "backend.directory", "backend.proxy_protocol",
+      "motd.source", "motd.sleeping", "motd.starting", "motd.stopped", "motd.version_name",
+      "power.directory", "power.stopped_message", "power.backup_message", "power.restore_message"];
     const unknown = Object.keys(t).filter((k) => !known.includes(k));
     if ("public_address" in t) {
       const m = String(t.public_address).trim().match(/^(.+):(\d+)$/);
@@ -636,8 +734,14 @@ version_name = ${tomlString(s.versionName)}
     }
     const map = { kick_message: "kickMessage", hold_timeout: "holdTimeout", sleep_after: "sleepAfter",
       minimum_online_time: "minOnline", stop_timeout: "stopTimeout", whitelist_only: "whitelistOnly",
-      "backend.port": "backendPort", "backend.directory": "directory", "backend.proxy_protocol": "proxyProtocol",
-      "motd.source": "motdSource", "motd.sleeping": "motdSleeping", "motd.starting": "motdStarting", "motd.version_name": "versionName" };
+      busy_command: "busyCommand", busy_retry: "busyRetry", busy_max_delay: "busyMaxDelay",
+      "backend.type": "backendType", "backend.address": "backendAddress", "backend.container": "container",
+      "backend.docker_endpoint": "dockerEndpoint",
+      "backend.directory": "directory", "backend.proxy_protocol": "proxyProtocol",
+      "motd.source": "motdSource", "motd.sleeping": "motdSleeping", "motd.starting": "motdStarting",
+      "motd.stopped": "motdStopped", "motd.version_name": "versionName",
+      "power.directory": "powerDir", "power.stopped_message": "stoppedMessage",
+      "power.backup_message": "backupMessage", "power.restore_message": "restoreMessage" };
     for (const [key, field] of Object.entries(map)) if (key in t) s[field] = t[key];
     if ("backend.command" in t) Object.assign(s, commandToForm(String(t["backend.command"])));
     return { state: s, unknown };
@@ -658,18 +762,29 @@ version_name = ${tomlString(s.versionName)}
   function validate(s) {
     const errs = [], warns = [];
     const isPort = (p) => Number.isInteger(p) && p >= 1 && p <= 65535;
+    const docker = s.backendType === "docker";
     if (!s.addrAuto) {
       if (!s.addrHost.trim()) errs.push("Listen IP is empty.");
       if (!isPort(s.addrPort)) errs.push("Invalid public port (1 to 65535).");
-      else if (s.addrPort === s.backendPort) errs.push("The local port must differ from the public port.");
     }
-    if (!isPort(s.backendPort)) errs.push("Invalid local port (1 to 65535).");
-    for (const [k, label] of [["sleepAfter", "Sleep after"], ["minOnline", "Minimum online time"], ["holdTimeout", "Player hold"], ["stopTimeout", "Stop timeout"]]) {
+    const backend = s.backendAddress.trim().match(/^(.+):(\d+)$/);
+    if (!backend) errs.push("Server address must look like host:port.");
+    else if (!isPort(Number(backend[2]))) errs.push("Invalid server port (1 to 65535).");
+    else if (!docker && Number(backend[2]) === (s.addrAuto ? 25565 : s.addrPort)) errs.push("The server port must differ from the public port.");
+    for (const [k, label] of [["sleepAfter", "Sleep after"], ["minOnline", "Minimum online time"], ["holdTimeout", "Player hold"],
+      ["stopTimeout", "Stop timeout"], ["busyRetry", "Busy check interval"], ["busyMaxDelay", "Sleep anyway after"]]) {
       if (!Number.isFinite(s[k]) || s[k] < 0) errs.push(`${label}: a positive number of seconds is expected.`);
     }
-    if (!command(s)) errs.push("The start command is empty.");
-    if (s.cmdMode === "builder" && !/\.jar$/i.test(s.jar.trim())) warns.push("The jar file does not end with .jar.");
-    if (s.holdTimeout > 28) warns.push("Player hold > 28 s: the client may give up first (around 30 s).");
+    if (s.busyCommand.trim() && !(s.busyRetry > 0)) errs.push("Busy check interval must be more than 0.");
+    if (docker) {
+      if (!s.container.trim()) errs.push("The container name is empty.");
+      if (s.dockerEndpoint.trim() && !/^(unix|tcp|http):\/\/./.test(s.dockerEndpoint.trim())) errs.push("Docker API must start with unix://, tcp:// or http://.");
+      if (backend && /^(127\.|localhost$)/.test(backend[1])) warns.push("docker: 127.0.0.1 is Sleepy's own container. Use the server container's name on a shared network (e.g. mc:25566).");
+    } else {
+      if (!command(s)) errs.push("The start command is empty.");
+      if (s.cmdMode === "builder" && !/\.jar$/i.test(s.jar.trim())) warns.push("The jar file does not end with .jar.");
+    }
+    if (s.holdTimeout < 30) warns.push("Player hold < 30 s: most modded servers take longer to start.");
     if (s.sleepAfter > 0 && s.sleepAfter < 30) warns.push("Sleep after < 30 s: the server may stop between two reconnections.");
     if (s.stopTimeout < 10) warns.push("Stop timeout < 10 s: the world may not have time to save.");
     if (s.cmdMode === "builder" && s.memMode === "pct" && s.memPct > 90) warns.push("More than 90% of RAM: Java may exceed the container limit.");
@@ -775,6 +890,20 @@ version_name = ${tomlString(s.versionName)}
   function update() {
     const s = read();
     $("addrHost").disabled = $("addrPort").disabled = s.addrAuto;
+    const docker = s.backendType === "docker";
+    $("dockerFields").hidden = !docker;
+    $("processFields").hidden = docker;
+    $("addressHint").innerHTML = docker
+      ? "The container on a shared Docker network, e.g. <code>mc:25566</code>. Never written anywhere."
+      : "Written to <code>server.properties</code> (<code>server-ip</code>, <code>server-port</code>). Keep 127.0.0.1.";
+    $("directoryHint").innerHTML = docker
+      ? "Optional, read only: mount the server data to use its <code>server-icon.png</code> and <code>whitelist.json</code>."
+      : "Relative to Sleepy's directory. <code>.</code> on Pterodactyl.";
+    $("stopHint").innerHTML = docker ? "Docker stop timeout: SIGTERM, then SIGKILL by Docker." : "After <code>stop</code>, before SIGTERM.";
+    const powerOn = !!s.powerDir.trim();
+    for (const el of document.querySelectorAll("[data-power]")) el.hidden = !powerOn;
+    if (!powerOn && previewMode === "stopped") setSeg("previewMode", "sleeping");
+    $("previewMode").querySelector('[data-v="stopped"]').hidden = !powerOn;
     $("builder").hidden = s.cmdMode !== "builder";
     $("customField").hidden = s.cmdMode !== "custom";
     $("pctField").hidden = s.memMode !== "pct";
@@ -788,7 +917,8 @@ version_name = ${tomlString(s.versionName)}
     const serverMotd = s.motdSource === "server";
     for (const el of document.querySelectorAll("[data-sleepy-motd]")) el.hidden = serverMotd;
     $("motdSourceHint").hidden = !serverMotd;
-    renderMc($("mcMotd"), serverMotd ? "§7§o(your Minecraft server's MOTD,\n§7§ocolors and plugins included)"
+    renderMc($("mcMotd"), previewMode === "stopped" ? s.motdStopped
+      : serverMotd ? "§7§o(your Minecraft server's MOTD,\n§7§ocolors and plugins included)"
       : previewMode === "starting" ? s.motdStarting : s.motdSleeping, "#AAAAAA");
     renderMc($("mcKickText"), s.kickMessage, "#FFFFFF");
 
@@ -829,6 +959,14 @@ version_name = ${tomlString(s.versionName)}
   }
   $("motdSleeping").addEventListener("focus", () => { setSeg("previewMode", "sleeping"); update(); });
   $("motdStarting").addEventListener("focus", () => { setSeg("previewMode", "starting"); update(); });
+  $("motdStopped").addEventListener("focus", () => { setSeg("previewMode", "stopped"); update(); });
+  // Switching the type proposes the usual address for it, unless one was typed.
+  $("backendType").addEventListener("change", () => {
+    const a = $("backendAddress");
+    if (a.value === "127.0.0.1:25566" && $("backendType").value === "docker") a.value = "mc:25566";
+    else if (a.value === "mc:25566" && $("backendType").value === "process") a.value = "127.0.0.1:25566";
+    update();
+  });
   $("kickMessage").addEventListener("focus", () => { setSeg("previewMode", "kick"); update(); });
 
   $("btnCopy").onclick = async () => {

@@ -1,4 +1,4 @@
-// Package console routes the Pterodactyl console (Sleepy's stdin).
+// Package console routes Sleepy's stdin: the Pterodactyl console, or "docker attach" on a container.
 //
 // Lines starting with "sleepy" are Sleepy commands and never reach the Minecraft server.
 // Otherwise, while Java runs every line goes to Java, so the console behaves exactly as without
@@ -13,12 +13,15 @@ import (
 
 	"sleepy/internal/backend"
 	"sleepy/internal/logx"
+	"sleepy/internal/power"
 	"sleepy/internal/settings"
 )
 
 type Router struct {
 	Backend  *backend.Backend
 	Settings *settings.Store
+	// Power is the shared state directory ([power]); nil when off. Its locks apply here too.
+	Power *power.Dir
 	// Reload re-reads sleepy.toml and applies it.
 	Reload func() error
 	// Quit handles "stop" while the server is asleep: quit Sleepy.
@@ -58,7 +61,7 @@ func (r *Router) HandleLine(line string) {
 	switch command {
 	case "":
 	case "start":
-		r.Backend.Start("console")
+		r.start("console")
 	case "stop":
 		r.Quit()
 	case "status":
@@ -96,7 +99,7 @@ func (r *Router) sleepyCommand(args []string) {
 		if r.Backend.Running() {
 			logx.Printf("The server is already %s", strings.ToLower(string(r.Backend.State())))
 		} else {
-			r.Backend.Start("sleepy wake")
+			r.start("sleepy wake")
 		}
 	case "reload":
 		if err := r.Reload(); err != nil {
@@ -105,6 +108,14 @@ func (r *Router) sleepyCommand(args []string) {
 	default:
 		logx.Printf("Unknown command \"sleepy %s\". Type sleepy help for the available commands.", sub)
 	}
+}
+
+func (r *Router) start(reason string) {
+	if why := r.Power.WakeBlocked(); why != power.None {
+		logx.Printf("Not starting the server: %s", power.Describe(why))
+		return
+	}
+	r.Backend.Start(reason)
 }
 
 func (r *Router) setAutoSleep(on bool) {

@@ -211,8 +211,18 @@ func fakeHandle(c net.Conn, ip string) {
 				c.Write(protocol.EncodePong(p.Data))
 				return
 			default:
-				// Login: proves the handshake and login start were replayed intact.
+				// Login: proves the handshake and login start were replayed intact, and that nothing
+				// else follows (a real client sends nothing more until the server answers).
 				name, _ := protocol.DecodeLoginStart(p)
+				if extra, _ := r.Next(); extra != nil {
+					c.Write(protocol.EncodeLoginDisconnect(fmt.Sprintf("unexpected packet 0x%x after login start", extra.ID)))
+					return
+				}
+				c.SetReadDeadline(time.Now().Add(150 * time.Millisecond))
+				if n, _ := c.Read(buf); n > 0 {
+					c.Write(protocol.EncodeLoginDisconnect("unexpected bytes after login start"))
+					return
+				}
 				c.Write(protocol.EncodeLoginDisconnect("hello " + name + " via " + ip + from))
 				return
 			}

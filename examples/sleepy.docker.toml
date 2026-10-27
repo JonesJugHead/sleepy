@@ -1,0 +1,42 @@
+# sleepy.toml for a modded server in a container (NeoForge / Arclight, itzg image), with a panel
+# and backup scripts sharing /var/lib/mc-power. Goes in /opt/sleepy (mounted as /data).
+public_address = "0.0.0.0:25565"
+kick_message = "§eLe serveur démarre, reconnecte-toi dans une minute"
+# A modded start can take minutes; 1.13+ clients are kept waiting that long.
+hold_timeout = 300
+# 45 minutes after the last player, so a map render has time to catch up.
+sleep_after = 2700
+minimum_online_time = 300
+# docker stop --timeout 170: the container has STOP_DURATION=150 and stop_grace_period 180s.
+stop_timeout = 170
+whitelist_only = false
+# Example: stay up while a render is in progress (exit code 0 = busy, first line = reason).
+# busy_command = "grep -q '\"busy\": *true' /var/lib/map-render/state.json && echo 'map render'"
+busy_command = ""
+busy_retry = 900
+busy_max_delay = 10800
+
+[backend]
+type = "docker"
+address = "mc:25566"
+container = "mc"
+# Empty: $DOCKER_HOST (set in docker-compose.yml).
+docker_endpoint = ""
+# Optional: mount the server data read-only here for server-icon.png and whitelist.json.
+# Without it, the icon and max players come from the server's own status, remembered.
+directory = "."
+# Arclight / NeoForge cannot read the PROXY header (yet): see the proxy-protocol project.
+proxy_protocol = "off"
+
+[motd]
+source = "server"
+sleeping = "§7Serveur en veille §8- §aconnecte-toi pour le réveiller"
+starting = "§eLe serveur démarre..."
+stopped = "§cServeur arrêté par un administrateur"
+version_name = "Sleepy"
+
+[power]
+directory = "/var/lib/mc-power"
+stopped_message = "Serveur arrêté par un administrateur"
+backup_message = "Sauvegarde en cours, réessaie dans une minute"
+restore_message = "Restauration en cours, réessaie dans quelques minutes"

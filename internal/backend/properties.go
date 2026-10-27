@@ -11,32 +11,32 @@ import (
 
 const propertiesFile = "server.properties"
 
-// RewriteServerProperties points the server at 127.0.0.1:<port>. Every other line is left untouched.
-func RewriteServerProperties(directory string, port int) error {
+// RewriteServerProperties points the server at host:port. Every other line is left untouched.
+func RewriteServerProperties(directory, host string, port int) error {
 	path := filepath.Join(directory, propertiesFile)
 	original, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	updated := SetProperties(string(original), [][2]string{{"server-port", strconv.Itoa(port)}, {"server-ip", "127.0.0.1"}})
+	updated := SetProperties(string(original), [][2]string{{"server-port", strconv.Itoa(port)}, {"server-ip", host}})
 	if updated == string(original) {
 		return nil
 	}
 	return os.WriteFile(path, []byte(updated), 0o644)
 }
 
-// ReadMaxPlayers returns max-players from server.properties, 20 if absent.
-func ReadMaxPlayers(directory string) int {
+// ReadMaxPlayers returns max-players from server.properties; ok is false if it is not there.
+func ReadMaxPlayers(directory string) (n int, ok bool) {
 	content, err := os.ReadFile(filepath.Join(directory, propertiesFile))
 	if err != nil {
-		return 20
+		return 0, false
 	}
-	v, ok := GetProperty(string(content), "max-players")
-	n, err := strconv.Atoi(strings.TrimSpace(v))
-	if !ok || err != nil || n < 0 {
-		return 20
+	v, found := GetProperty(string(content), "max-players")
+	n, err = strconv.Atoi(strings.TrimSpace(v))
+	if !found || err != nil || n < 0 {
+		return 0, false
 	}
-	return n
+	return n, true
 }
 
 // ReadMotd returns motd= from server.properties, unescaped (§ becomes §, \n a new line).

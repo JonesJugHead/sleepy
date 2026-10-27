@@ -40,16 +40,21 @@ func (w *lineWatcher) feed(chunk []byte) bool {
 }
 
 // PingStatus asks the local server for its status and reports whether it answered validly.
-func PingStatus(port int, proxyHeader bool, timeout time.Duration) bool {
-	_, ok := FetchStatus(port, proxyHeader, timeout)
+func PingStatus(address string, proxyHeader bool, timeout time.Duration) bool {
+	_, ok := FetchStatus(address, proxyHeader, timeout)
 	return ok
 }
 
-// FetchStatus returns the local server's status JSON.
+// FetchStatus returns the server's status JSON (address is host:port).
 // Refused or closed connections are normal while the server boots and are not logged;
 // a response that cannot be decoded is. proxyHeader must match what the server expects.
-func FetchStatus(port int, proxyHeader bool, timeout time.Duration) (string, bool) {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), timeout)
+func FetchStatus(address string, proxyHeader bool, timeout time.Duration) (string, bool) {
+	host, portText, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", false
+	}
+	port, _ := strconv.Atoi(portText)
+	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
 		return "", false
 	}
@@ -59,7 +64,7 @@ func FetchStatus(port int, proxyHeader bool, timeout time.Duration) (string, boo
 	if proxyHeader {
 		request = protocol.ProxyHeaderV2(conn.LocalAddr(), conn.RemoteAddr())
 	}
-	request = append(request, protocol.EncodeHandshake(protocol.Handshake{ProtocolVersion: -1, Address: "127.0.0.1", Port: uint16(port), Intent: protocol.IntentStatus})...)
+	request = append(request, protocol.EncodeHandshake(protocol.Handshake{ProtocolVersion: -1, Address: host, Port: uint16(port), Intent: protocol.IntentStatus})...)
 	if _, err := conn.Write(append(request, protocol.EncodeStatusRequest()...)); err != nil {
 		return "", false
 	}
@@ -75,12 +80,12 @@ func FetchStatus(port int, proxyHeader bool, timeout time.Duration) (string, boo
 				if json.Valid([]byte(js)) {
 					return js, true
 				}
-				logx.Printf("Invalid status response from the local server: not valid JSON")
+				logx.Printf("Invalid status response from the server: not valid JSON")
 				return "", false
 			}
 		}
 		if perr != nil {
-			logx.Printf("Invalid status response from the local server: %v", perr)
+			logx.Printf("Invalid status response from the server: %v", perr)
 			return "", false
 		}
 		if err != nil {
@@ -89,13 +94,18 @@ func FetchStatus(port int, proxyHeader bool, timeout time.Duration) (string, boo
 	}
 }
 
-// statusDescription extracts the MOTD (a JSON text component) from a status response.
-func statusDescription(status string) json.RawMessage {
+// parseServerStatus extracts what is remembered from a status response: the MOTD (a JSON text
+// component), the favicon and max players.
+func parseServerStatus(status string) (ServerStatus, bool) {
 	var s struct {
 		Description json.RawMessage `json:"description"`
+		Favicon     string          `json:"favicon"`
+		Players     struct {
+			Max int `json:"max"`
+		} `json:"players"`
 	}
 	if json.Unmarshal([]byte(status), &s) != nil || !json.Valid(s.Description) {
-		return nil
+		return ServerStatus{}, false
 	}
-	return s.Description
+	return ServerStatus{Description: s.Description, Favicon: s.Favicon, MaxPlayers: s.Players.Max}, true
 }

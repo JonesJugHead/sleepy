@@ -65,3 +65,28 @@ func (c *clientConn) watchClose() (closed <-chan struct{}, stop func()) {
 		c.SetReadDeadline(time.Time{})
 	}
 }
+
+// takeKeepAliveAnswers reads the client's answers to the sent keep-alive requests (ids 1..sent),
+// which must not reach the server, and returns every other byte the client sent, to replay.
+func (c *clientConn) takeKeepAliveAnswers(sent int32, timeout time.Duration) ([]byte, error) {
+	if sent == 0 {
+		return c.reader.Drain(), nil
+	}
+	c.SetReadDeadline(time.Now().Add(timeout))
+	defer c.SetReadDeadline(time.Time{})
+	var keep []byte
+	for answered := int32(0); answered < sent; {
+		p, err := c.next()
+		if err != nil {
+			return nil, err
+		}
+		if p.ID == protocol.LoginPluginResponseID {
+			if id, err := protocol.DecodeLoginPluginResponse(p); err == nil && id >= 1 && id <= sent {
+				answered++
+				continue
+			}
+		}
+		keep = append(keep, p.Raw...)
+	}
+	return append(keep, c.reader.Drain()...), nil
+}
